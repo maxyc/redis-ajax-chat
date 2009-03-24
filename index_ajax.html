@@ -1,0 +1,649 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+		
+		<!-- основной стиль ExtJS -->
+		<link rel="stylesheet" href="inc/extjs/resources/css/ext-all.css" media="all" type="text/css">
+		
+		
+		<!-- подключение библиотек -->
+		<script language="JavaScript" src="inc/extjs/adapter/jquery/jquery.js"  type="application/x-javascript"></script>
+		<script language="JavaScript" src="inc/extjs/adapter/jquery/ext-jquery-adapter.js"  type="application/x-javascript"></script>
+			
+		<script language="JavaScript" src="inc/extjs/ext-all-debug.js"  type="application/x-javascript"></script>
+		
+		<!-- библиотека подсказок окна -->
+		<script language="JavaScript" src="inc/extjs-ux/MessageWindow.js"  type="application/x-javascript"></script>
+		
+		
+		
+	<script language="JavaScript">
+		
+		Ext.BLANK_IMAGE_URL = 'inc/extjs/resources/images/default/s.gif';
+		Ext.enableGarbageCollector = true;
+		
+		var im_main_wnd = null; //основное окно мессенжера
+		
+		var my_chat_name = ''; //мой ник в чате
+		var last_msg_id = 0; //ид последнего полученного сообщения 
+		var first_msg_id = null;
+		
+		var max_messages_to_view = 200;
+		
+		var _msg_id_all = new Ext.util.MixedCollection();
+		
+		
+		Ext.onReady(function(){
+			
+			Ext.QuickTips.init();
+			
+			
+		// tabs for the center
+        var tabs = new Ext.TabPanel({
+            region    : 'center',
+			id        : '_chat_tab_panel',
+			disabled  : false,
+            margins   : '3 3 3 0', 
+			title     : 'Default room: ' + my_chat_name,
+            activeTab : 0,
+			header:true,
+			autoScroll: true,
+			html      : '<div id="_chat_default_msg_pane"></div>',
+            
+			bbar:[
+				new Ext.form.TextField({
+					 	  allowBlank:true,
+						  emptyText:'enter you chat messages here and press say',
+						  id:'_chat_say_field',
+						  width:500,
+						  anchor:'100%',
+						  enableKeyEvents: true,
+						  listeners:{
+						  	"specialkey": function(obj, e){
+								//console.log(e.getCharCode());
+								if (e.getCharCode() == Ext.EventObject.ENTER)
+								{
+									chat_msg_say(Ext.getCmp('_chat_say_field').getValue(), my_chat_name, 'default');
+								}
+							}
+						  }
+				}),
+				{xtype: 'tbspacer'},
+				new Ext.Toolbar.Button({
+					handler: function(){ chat_msg_say(Ext.getCmp('_chat_say_field').getValue(), my_chat_name, 'default'); },
+					cls:"x-btn-text-icon",
+					icon:'images/user_comment.png',
+					text: '<b>Say</b>',
+					id:'_chat_say_btn'
+				}), 
+			]
+        });
+
+		/*
+        // Panel for the west
+        var nav = new Ext.Panel({
+            title       : 'Rooms',
+            region      : 'east',
+            split       : true,
+			id          : '_room_list_panel', 
+            width       : 200,
+            collapsible : true,
+            margins     : '3 0 3 3',
+            cmargins    : '3 3 3 3',
+			disabled    : true
+        }); 
+		*/
+		var users = new Ext.Panel({
+            title       : 'On-line users',
+            region      : 'west',
+            split       : true,
+			id          : '_onlineusers_list_panel', 
+            width       : 200,
+			containerScroll:true,
+			autoScroll : true,
+            collapsible : true,
+            margins     : '3 0 3 3',
+            cmargins    : '3 3 3 3',
+			disabled    : true,
+			items       :[
+				new Ext.tree.TreePanel({
+							autoHeight:true,
+							autoScroll:true,
+							autoWidth:true,
+							headerAsText:false,
+							hideBorders:true,
+							iconCls:'agpchatim_contacts_tab',
+							id:'agpchatim_contacts_tab',
+							//title:'Контакты',
+							animCollapse:true,
+							animate:true,
+							autoShow:true,
+							bodyBorder:false,
+							border:false,
+							collapseFirst:false,
+							collapsed:false,
+							collapsible:false,
+							containerScroll:true,
+							draggable:false,
+							enableDD:false,
+							enableDD:false,
+							footer:false,
+							frame:true,
+							shim:true,
+							shadow:true,
+							header:false,
+							lines:true,
+							rootVisible:true,
+							useArrows:true,
+							singleExpand:false,
+							//selModel: new Ext.tree.MultiSelectionModel(),
+							root:new Ext.tree.TreeNode({
+									allowChildren:true,
+									expandable:false,
+									expanded:false,
+									leaf:false,
+									singleClickExpand:true,
+									icon:'images/group.png',
+									text:"Users at room"
+								})						
+						})
+			]			
+        }); 
+
+        var win = new Ext.Window({
+            title    : 'AGPsource Chat system',
+			closable : true,
+            width    : 800,
+            height   : 400,
+            //border : false,
+            plain    : true,
+            layout   : 'border',
+			listeners: {
+				"close": function(){
+					go_out();
+				}
+			},
+			bbar     : [
+				new Ext.Toolbar.Button({
+					handler: function(){
+						
+						var form = new Ext.form.FormPanel({
+					        baseCls: 'x-plain',
+					        labelWidth: 55,
+							id: 'login_form',
+					        defaultType: 'textfield',					
+					        items: [{
+					            fieldLabel: 'Login',
+					            id: '_chat_login_fld',
+					            anchor:'100%',
+								//vtype:'alphanum',
+								allowBlank:false,
+								emptyText:'Your login (nick-name) in chat',
+								maxLength:100,
+								minLength:4
+					        },{
+					            fieldLabel: 'Password',
+					            id: '_chat_password_fld',
+					            anchor: '100%',
+								vtype:'alphanum',
+								allowBlank:false,
+								emptyText:'Your password',
+								maxLength:100,
+								minLength:4,
+								inputType:'password'
+					        },
+							new Ext.form.Label({
+								html:'<b>Help</b>: login and password ONLY at english (latin char and numbers), max length is 100 char, min - 4.'
+							})
+							]
+					    });
+
+						
+						var login_wnd = new Ext.Window({
+					        title: 'Login to chat',
+					        width: 300,
+					        height:175,
+					        //minWidth: 300,
+					        //minHeight: 200,
+					        layout: 'fit',
+					        plain:true,
+							modal:true,
+							id:'login_to_chat',
+					        bodyStyle:'padding:5px;',
+					        buttonAlign:'center',
+					        items: form,					
+					        buttons: [{
+					            text: 'Login to chat',
+								cls:"x-btn-text-icon",
+								icon:'images/user_add.png',
+								handler:function(){
+									
+									if (Ext.getCmp('login_form').getForm().isValid() == true) {
+									
+										Ext.getCmp('login_to_chat').disable();
+										
+										Ext.Ajax.request({
+											url: 'chatd.php',
+											params: {
+												action: 'chat/login',
+												user_login: Ext.getCmp('_chat_login_fld').getValue(),
+												user_password: Ext.getCmp('_chat_password_fld').getValue()
+											},
+											failure: function(){
+												Ext.Msg.alert('Error', 'Some error, sorry. Mybe, wrong password or username is already present in chat, so you must choose other login');
+												Ext.getCmp('login_to_chat').enable();
+											},
+											success: function(){
+												Ext.Msg.alert('Chat', 'Wow! You are in chat now! Pleas, select the room and talk!', function(){
+												
+													my_chat_name = Ext.getCmp('_chat_login_fld').getValue();
+													
+													chat_load_users();
+													chat_load_msgs(0, true);
+													
+													//старт автоапдейта сообщений
+													chat_msg_autoupdate();
+													chat_users_autoupdate();
+													chat_autoremove();
+													chat_ping();
+													
+													Ext.getCmp('_chat_tab_panel').setTitle('Default room: ' + my_chat_name);
+													
+													Ext.getCmp('_chat_tab_panel').enable();
+													Ext.getCmp('_onlineusers_list_panel').enable();
+													
+													//Ext.getCmp('chat_refresh_msg_list').enable();
+													Ext.getCmp('chat_refresh_user_online').enable();	
+													Ext.getCmp('chat_choose_rooms').enable();
+													
+													Ext.getCmp('login_to_chat').enable();
+													Ext.getCmp('login_to_chat').close();
+												});
+											}
+										});
+									}
+								}								
+					        },{
+					            text: 'Cancel',
+								handler:function(){
+									Ext.getCmp('login_to_chat').close();
+								}
+					        }]
+					    });
+						
+						login_wnd.show();
+
+					},
+					cls:"x-btn-text-icon",
+					icon:'images/user_add.png',
+					text: '<b>Login</b> to chat'
+				}),
+				new Ext.Toolbar.Button({
+					handler: function(){ chat_load_users(); },
+					cls:"x-btn-text-icon",
+					icon:'images/arrow_refresh_small.png',
+					text: '<b>refresh</b> online users',
+					id:'chat_refresh_user_online',
+					disabled:true
+				}),
+				new Ext.Toolbar.Button({
+					handler: function(){},
+					cls:"x-btn-text-icon",
+					icon:'images/comments.png',
+					text: '<b>rooms</b> list',
+					disabled:true,
+					id:'chat_choose_rooms',
+					disabled:true
+				}),
+				/*
+				new Ext.Toolbar.Button({
+					handler: function(){ chat_load_msgs(0, true); },
+					cls:"x-btn-text-icon",
+					icon:'images/comments.png',
+					text: '<b>Refresh</b> messages list',
+					id:'chat_refresh_msg_list',
+					disabled:true
+				}), */
+				new Ext.Toolbar.Button({
+					handler: function(){ 
+						go_out();
+					},
+					cls:"x-btn-text-icon",
+					icon:'images/user_delete.png',
+					text: '<b>Go out</b>'
+				})
+			],
+            items    : [users, tabs]
+        });
+			
+			
+			
+		win.show();	
+			
+			
+			
+
+		});
+		
+
+//загрузка списка комнат
+function chat_load_users()
+{
+	Ext.Ajax.request({
+						url: 'chatd.php',
+						params: {
+									action: 'chat/get/useronline/atroom',
+									room: 'default'
+						},
+						failure: function(){
+								Ext.Msg.alert('Error', 'Some error, sorry');
+						},
+						success: function(x){
+							var u = Ext.decode(x.responseText);	
+							
+							/*
+							алгоритм следующий - пройдемся по узлам,
+							если нам встретился узел, которые пришел в ответе, пометить как онлайн
+							остальные офф лайн.
+							при следующем проходе удалить все оффлайн							
+							*/
+							/*
+							var root = Ext.getCmp('agpchatim_contacts_tab').getRootNode();
+							
+							 не выходит, потом сделать
+							 root.eachChild(function(item){
+							 	if (item.attributes.status == 'offline') //удалить оффлайновые ноды
+							 	{
+									item.remove();
+								}
+								
+								foreach (x in u)
+								{
+									if (item.attributes.login == )
+								}
+															
+								
+							 });
+							*/
+							
+							var root = Ext.getCmp('agpchatim_contacts_tab').getRootNode();	
+								root.collapseChildNodes();
+								//очищаем дерево
+								while(root.firstChild) {
+								    root.removeChild(root.firstChild);
+								}						
+								
+							Ext.each(u, function(item,x,y,z){
+								
+								var node = new Ext.tree.TreeNode({
+									allowChildren:false,
+									draggable:false,
+									expandable:false,
+									expanded:true,
+									icon:'images/user.png',
+									leaf:true,
+									text: item.name,
+									status: 'online',
+									login : item.name,
+									qtip:'Login: <b>' + item.name + '</b><br />Role: <b>' + item.role + '</b><br />Status: <b>' + item.status + '</b><br />In chat: <b>'+ item.at_chat +'</b>'
+								});
+								
+								root.appendChild(node);								
+							});	
+								
+							root.expand();	
+								
+										
+						}
+	});
+	
+}
+
+
+//загрузка последних сообщений чата
+function chat_load_msgs(from, clear)
+{
+	
+	Ext.Ajax.request({
+						url: 'chatd.php',
+						params: {
+									action: 'chat/get/msgs',
+									room: 'default',
+									lastmsgid: from
+						},
+						failure: function(){
+								Ext.Msg.alert('Error', 'Some error, sorry');
+						},
+						success: function(x){
+							var u = Ext.decode(x.responseText);	
+							var root = Ext.get('_chat_default_msg_pane');
+						
+							if (clear == true)
+							{
+								root.update('');
+								last_msg_id = 0;
+								//_msg_id_all.clear();								
+							}
+											
+								
+							Ext.each(u, function(item){
+								
+								//if (first_msg_id == null)
+								//{
+								//	first_msg_id = item.id; //первое сообщение
+								//}
+								
+								root.insertHtml('afterEnd', '<div id="msg_' + item.id + '" style="margin-top:2px;margin-bottom:2px;margin-left:5px;margin-right:5px;">&nbsp;<img src="images/comment.png" align="absmiddle" />&nbsp;&nbsp;[<b>'+ item.author+'</b> at '+ item.time +']:&nbsp;&nbsp;' + item.body + '</div>');  
+
+								last_msg_id = item.id;
+								
+								//_msg_id_all.add('msg_' + item.id, item.id);
+								
+							});	
+								
+							//root.expand();	
+								
+							Ext.getCmp('_chat_say_btn').enable();
+							Ext.getCmp('_chat_say_field').enable(); 				
+						}
+	});	
+}
+
+
+function chat_msg_say(msg, author, room)
+{
+	if (Ext.isEmpty(msg) == true) return false;
+	
+	Ext.getCmp('_chat_say_btn').disable();
+	Ext.getCmp('_chat_say_field').disable(); 
+	
+	Ext.Ajax.request({
+						url: 'chatd.php',
+						params: {
+									action: 'chat/say',
+									room: 'default',
+									author:author,
+									msg:msg									
+						},
+						failure: function(){
+								Ext.Msg.alert('Error', 'Some error, sorry');
+						},
+						success: function(){
+							Ext.getCmp('_chat_say_field').reset();
+						}
+	});		
+							
+							
+}
+
+//выход с чата
+function go_out()
+{
+	Ext.Ajax.request({
+						url: 'chatd.php',
+						params: {
+									action: 'chat/gout',
+									room: 'default',
+									user: my_chat_name
+						},
+						failure: function(){
+								Ext.Msg.alert('Error', 'Some error, sorry');
+						},
+						success: function(){
+							chat_msg_runner.stop(chat_msg_runner_task);
+							chat_users_runner.stop(chat_users_runner_task);
+							chat_autoremove_runner.stop(chat_autoremove_runner_task);	
+							
+							Ext.Msg.alert('Chat', 'Successfull, you are go out from chat');
+							
+							Ext.getCmp('_chat_tab_panel').disable();
+							Ext.getCmp('_onlineusers_list_panel').disable();
+							
+							
+							//дисаблим кнопки
+							Ext.getCmp('chat_refresh_msg_list').disable();
+							Ext.getCmp('chat_refresh_user_online').disable();	
+							Ext.getCmp('chat_choose_rooms').disable();
+											
+						}
+	});
+}
+
+
+//автообновление чата - сообщений
+var chat_msg_runner = null;
+var chat_msg_runner_task = null;
+
+function chat_msg_autoupdate()
+{
+	var interval = 3000; // 3 Секунды	
+	
+	chat_msg_runner_task = {
+    run: function(){
+			if (last_msg_id > 0)
+			{
+				chat_load_msgs(last_msg_id, false);
+			}        	
+    	},
+   		interval: interval
+	}
+	
+	chat_msg_runner = new Ext.util.TaskRunner();
+	chat_msg_runner.start(chat_msg_runner_task);	
+}
+
+var chat_users_runner = null;
+var chat_users_runner_task = null;
+function chat_users_autoupdate()
+{
+	var interval = 60000;
+	
+	chat_users_runner_task = {
+    run: function(){
+			if (last_msg_id > 0)
+			{
+				chat_load_users();
+			}        	
+    	},
+   		interval: interval
+	}
+	
+	chat_users_runner = new Ext.util.TaskRunner();
+	chat_users_runner.start(chat_users_runner_task);	
+}
+
+
+
+//функция очистки старых сообщений
+function chat_remove_old()
+{
+	if (last_msg_id < max_messages_to_view)
+	{
+		return false;
+	}
+	else
+		{
+			var tmp = last_msg_id - max_messages_to_view;
+			var root = Ext.get('_chat_default_msg_pane');
+			
+			_msg_id_all.each(function(i,y){
+				if (i < tmp)
+				{
+					_msg_id_all.removeKey('msg_' + i);
+					
+					Ext.get('msg_' + i).remove();
+				}
+			});
+			
+			
+		}
+}
+
+
+
+var chat_autoremove_runner = null;
+var chat_autoremove_runner_task = null;
+function chat_autoremove()
+{
+	
+	var interval = 300000;
+	
+	chat_autoremove_runner_task = {
+    run: function(){
+			if ((last_msg_id > 0) && (last_msg_id > max_messages_to_view))
+			{
+				chat_load_msgs(0, true);
+				//chat_remove_old();   (last_msg_id - max_messages_to_view)
+			}        	
+    	},
+   		interval: interval
+	}
+	
+	chat_autoremove_runner = new Ext.util.TaskRunner();
+	chat_autoremove_runner.start(chat_autoremove_runner_task);	
+	
+}
+
+
+
+// пинг что я онлайн
+var chat_ping_runner = null;
+var chat_ping_runner_task = null;
+function chat_ping()
+{
+	//раз в минуту пинговать
+	var interval = 62000;
+	
+	chat_ping_runner_task = {
+		 run: function(){
+			Ext.Ajax.request({
+						url: 'chatd.php',
+						params: {
+									action: 'chat/ping',
+									user: my_chat_name
+						},
+						failure: function(){},						
+						success: function(){}
+			});   	
+    	},
+   		interval: interval
+	}
+	
+	chat_ping_runner = new Ext.util.TaskRunner();
+	chat_ping_runner.start(chat_ping_runner_task);	
+	
+}
+
+
+
+	</script>	
+		
+        <title>AGPsource ChatIM Communicator examples, ver. 0.1</title>
+    </head>
+    <body>
+    	
+  
+    </body>
+</html>
