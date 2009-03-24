@@ -1,0 +1,37 @@
+DirectoryIndex index.html index.php
+
+#AddHandler php5-script .php
+AddDefaultCharset UTF-8
+
+RewriteEngine off
+
+
+AddOutputFilterByType DEFLATE text/html
+AddOutputFilterByType DEFLATE text/xml
+AddOutputFilterByType DEFLATE image/x-icon
+AddOutputFilterByType DEFLATE text/css
+AddOutputFilterByType DEFLATE application/x-javascript
+
+BrowserMatch ^Mozilla/4 gzip-only-text/html
+BrowserMatch ^Mozilla/4\.0[678] no-gzip
+BrowserMatch Konqueror no-gzip
+BrowserMatch \bMSIE !no-gzip !gzip-only-text/html
+
+Header append Vary User-Agent
+
+<FilesMatch .*\.(css|js|php|phtml|shtml|html|xml)$>
+    Header append Cache-Control private
+</FilesMatch>
+
+ExpiresActive On
+ExpiresDefault "access plus 1 month"
+
+<FilesMatch .*\.(shtml|html|phtml|php)$>
+    ExpiresActive Off
+</FilesMatch>
+
+
+
+
+
+
