@@ -1218,7 +1218,7 @@
 	}
 	
 	/**
-	 * EXPIRE - not realize at now
+	 * EXPIRE - 
 	 * @return 
 	 * @param object $instance[optional]
 	 * @param object $key[optional]
@@ -1228,11 +1228,37 @@
 	{
 		if ((empty($instance)) || (!isset($instance))) $instance = 0;
 		if (($key == null) || ($expire == null)) return false;
+		if (!is_int($expire)) $expire = (int)$expire;
 		
-		return false;
+		$this->_commandQuery('EXPIRE '. $key . ' ' . $expire . $this->_defaultDelimetr, $instance, null);
+		
+		$result = $this->_commandResponseRead($instance);
+		
+		if ((is_int($result)) && ($result == 1)) return true;
+		else
+			return false;
 	}
 	
 	
+	/**
+	 * Basic authenfication, call before first command
+	 * @return 
+	 * @param object $instance[optional]
+	 * @param object $pass[optional]
+	 */
+	public function auth($instance = 0, $pass = null)
+	{
+		if ((empty($instance)) || (!isset($instance))) $instance = 0;
+		if ($pass == null) return false;
+		
+		$this->_commandQuery('AUTH '. $pass . $this->_defaultDelimetr, $instance, null);
+		
+		$result = $this->_commandResponseRead($instance);
+		
+		if ($result == TRUE) return true;
+		else
+			return $result;		
+	}
 
 	/**
 	 * Low-level command query
@@ -1289,30 +1315,26 @@
 			//ERROR
 			$responce = substr($returnBuffer, 1, (strlen($returnBuffer)-1));
 			
-			if ($responce == '-1')  throw new Redis_Server_KeyException('Key not found');
-			if ($responce == '-2')  throw new Redis_Server_TypeException('Key contains a value of the wrong type');
-			if ($responce == '-3')  throw new Redis_Server_TypeException('Source object and destination object are the same');
-			if ($responce == '-4')  throw new Redis_Server_KeyException('Out of range argument');
-			
 			if (substr($returnBuffer,0, 4) == '-ERR')
 			{
 				throw new Redis_Server_Exception('Redis server error: ' . $returnBuffer);
 			}
-
-			return false;
+			else
+				{
+					if (is_numeric($returnBuffer) == TRUE)   //numeric responce
+					{
+						return (int)$returnBuffer;
+					}
+					else
+						{
+							throw new Redis_Server_Exception('Redis server error: ' . $responce);
+						}					
+				}
 		}
 		if ($responceType == ':')
 		{
 			// simple integer responce
 			$returnBuffer = (int)substr($returnBuffer, 1, strlen($returnBuffer));
-			
-			if ($returnBuffer < 0)
-			{
-				if ($returnBuffer == -1)  throw new Redis_Server_KeyException('Key not found');
-				if ($returnBuffer == -2)  throw new Redis_Server_TypeException('Key contains a value of the wrong type');
-				if ($returnBuffer == -3)  throw new Redis_Server_TypeException('Source object and destination object are the same');
-				if ($returnBuffer == -4)  throw new Redis_Server_KeyException('Out of range argument');
-			}
 			
 			return $returnBuffer;
 		}
